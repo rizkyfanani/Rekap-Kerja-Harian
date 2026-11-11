@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full bg-slate-900 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Sistem Laporan Pengerjaan Produksi</title>
+
+  <!-- PWA Meta Tags -->
+  <meta name="theme-color" content="#0f172a">
+  <meta name="description" content="Aplikasi pencatatan pelaporan harian pengerjaan produksi terintegrasi Google Drive & Spreadsheet.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Font Family -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+
+    .glass-card {
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+  </style>
+</head>
+
+<body class="min-h-full flex flex-col justify-between selection:bg-indigo-500 selection:text-white pb-20 md:pb-8">
+
+  <!-- TOP HEADER -->
+  <header class="sticky top-0 z-30 glass-card border-b border-slate-800/80 px-4 py-3 sm:px-8">
+    <div class="max-w-3xl mx-auto flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+          <i data-lucide="clipboard-check" class="w-5 h-5 text-white"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-base sm:text-lg text-white leading-tight">WorkReport Pro</h1>
+          <p class="text-xs text-slate-400">Pencatatan Pengerjaan Produksi</p>
+        </div>
+      </div>
+
+      <!-- Network Status & Draft Badge -->
+      <div class="flex items-center gap-2">
+        <span id="draftBadge" class="hidden text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-1 rounded-full items-center gap-1">
+          <i data-lucide="file-edit" class="w-3 h-3"></i> Draft
+        </span>
+        <span id="networkBadge" class="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-full flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          Online
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT CONTAINER -->
+  <main class="max-w-3xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex-1">
+    
+    <!-- Config Banner Notice (If Web App URL not set) -->
+    <div id="gasAlert" class="mb-6 p-4 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-indigo-200 text-xs sm:text-sm flex items-start gap-3">
+      <i data-lucide="info" class="w-5 h-5 text-indigo-400 shrink-0 mt-0.5"></i>
+      <div>
+        <p class="font-semibold text-white mb-1">Konfigurasi Google Apps Script (GAS)</p>
+        <p class="leading-relaxed">Pastikan Anda telah memasukkan URL Web App Script pada variabel <code class="bg-slate-800 px-1.5 py-0.5 rounded text-indigo-300">GAS_ENDPOINT_URL</code> di dalam kode JavaScript aplikasi ini.</p>
+      </div>
+    </div>
+
+    <!-- Notification Alert Box -->
+    <div id="alertBox" class="hidden mb-6 p-4 rounded-xl border transition-all duration-300">
+      <div class="flex items-start gap-3">
+        <i id="alertIcon" class="w-5 h-5 shrink-0 mt-0.5"></i>
+        <div class="flex-1">
+          <h4 id="alertTitle" class="font-semibold text-sm"></h4>
+          <p id="alertMessage" class="text-xs sm:text-sm mt-0.5 opacity-90"></p>
+        </div>
+        <button onclick="closeAlert()" class="opacity-60 hover:opacity-100 p-1">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- FORM CARD -->
+    <form id="reportForm" class="glass-card rounded-2xl p-5 sm:p-8 space-y-6 shadow-2xl">
+      
+      <!-- HEADER FORM -->
+      <div class="border-b border-slate-800 pb-4">
+        <h2 class="text-lg font-bold text-white flex items-center gap-2">
+          <i data-lucide="pen-tool" class="w-5 h-5 text-indigo-400"></i>
+          Formulir Laporan Lapangan
+        </h2>
+        <p class="text-xs text-slate-400 mt-1">Isi detail pekerjaan dengan teliti beserta lampiran bukti foto fisik.</p>
+      </div>
+
+      <!-- 1. NAMA PERUSAHAAN & NAMA PETUGAS GRID -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        
+        <!-- Field Perusahaan -->
+        <div class="space-y-2">
+          <label for="companyName" class="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+            1. Nama Perusahaan <span class="text-rose-500">*</span>
+          </label>
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+              <i data-lucide="building-2" class="w-4 h-4"></i>
+            </div>
+            <input 
+              type="text" 
+              id="companyName" 
+              name="companyName" 
+              required
+              placeholder="Contoh: PT Sumber Pangan Makmur" 
+              class="w-full pl-10 pr-4 py-3 bg-slate-800/80 border border-slate-700/80 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+            >
+          </div>
+        </div>
+
+        <!-- Field Nama Petugas -->
+        <div class="space-y-2">
+          <label for="officerName" class="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+            2. Nama Petugas <span class="text-rose-500">*</span>
+          </label>
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+              <i data-lucide="user" class="w-4 h-4"></i>
+            </div>
+            <input 
+              type="text" 
+              id="officerName" 
+              name="officerName" 
+              required
+              placeholder="Masukkan nama lengkap Anda" 
+              class="w-full pl-10 pr-4 py-3 bg-slate-800/80 border border-slate-700/80 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+            >
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 2. ITEM PEKERJAAN (CUSTOM RADIO CARDS) -->
+      <div class="space-y-2">
+        <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+          3. Item Pekerjaan <span class="text-rose-500">*</span>
+        </label>
+        
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+          
+          <!-- Option 1: Melipat Kardus -->
+          <label class="relative flex items-center p-3.5 rounded-xl border border-slate-700/80 bg-slate-800/40 hover:bg-slate-800/80 cursor-pointer transition-all group has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-950/30 has-[:checked]:ring-1 has-[:checked]:ring-indigo-500">
+            <input type="radio" name="taskItem" value="Melipat Kardus" required class="peer sr-only">
+            <div class="w-9 h-9 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center mr-3 group-hover:scale-105 transition-transform">
+              <i data-lucide="box" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1">
+              <span class="block text-sm font-medium text-slate-200 group-hover:text-white">Melipat Kardus</span>
+              <span class="block text-[11px] text-slate-400">Pengemasan awal & perakitan</span>
+            </div>
+            <div class="w-5 h-5 rounded-full border border-slate-600 peer-checked:border-indigo-500 peer-checked:bg-indigo-600 flex items-center justify-center transition-all">
+              <i data-lucide="check" class="w-3 h-3 text-white opacity-0 peer-checked:opacity-100"></i>
+            </div>
+          </label>
+
+          <!-- Option 2: Mencuci Protein -->
+          <label class="relative flex items-center p-3.5 rounded-xl border border-slate-700/80 bg-slate-800/40 hover:bg-slate-800/80 cursor-pointer transition-all group has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-950/30 has-[:checked]:ring-1 has-[:checked]:ring-indigo-500">
+            <input type="radio" name="taskItem" value="Mencuci Protein" class="peer sr-only">
+            <div class="w-9 h-9 rounded-lg bg-cyan-500/10 text-cyan-400 flex items-center justify-center mr-3 group-hover:scale-105 transition-transform">
+              <i data-lucide="droplets" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1">
+              <span class="block text-sm font-medium text-slate-200 group-hover:text-white">Mencuci Protein</span>
+              <span class="block text-[11px] text-slate-400">Pembersihan bahan baku</span>
+            </div>
+            <div class="w-5 h-5 rounded-full border border-slate-600 peer-checked:border-indigo-500 peer-checked:bg-indigo-600 flex items-center justify-center transition-all">
+              <i data-lucide="check" class="w-3 h-3 text-white opacity-0 peer-checked:opacity-100"></i>
+            </div>
+          </label>
+
+          <!-- Option 3: Kemas Kerupuk -->
+          <label class="relative flex items-center p-3.5 rounded-xl border border-slate-700/80 bg-slate-800/40 hover:bg-slate-800/80 cursor-pointer transition-all group has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-950/30 has-[:checked]:ring-1 has-[:checked]:ring-indigo-500">
+            <input type="radio" name="taskItem" value="Kemas Kerupuk" class="peer sr-only">
+            <div class="w-9 h-9 rounded-lg bg-orange-500/10 text-orange-400 flex items-center justify-center mr-3 group-hover:scale-105 transition-transform">
+              <i data-lucide="package-check" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1">
+              <span class="block text-sm font-medium text-slate-200 group-hover:text-white">Kemas Kerupuk</span>
+              <span class="block text-[11px] text-slate-400">Pengemasan produk akhir</span>
+            </div>
+            <div class="w-5 h-5 rounded-full border border-slate-600 peer-checked:border-indigo-500 peer-checked:bg-indigo-600 flex items-center justify-center transition-all">
+              <i data-lucide="check" class="w-3 h-3 text-white opacity-0 peer-checked:opacity-100"></i>
+            </div>
+          </label>
+
+          <!-- Option 4: Kemas Sendok -->
+          <label class="relative flex items-center p-3.5 rounded-xl border border-slate-700/80 bg-slate-800/40 hover:bg-slate-800/80 cursor-pointer transition-all group has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-950/30 has-[:checked]:ring-1 has-[:checked]:ring-indigo-500">
+            <input type="radio" name="taskItem" value="Kemas Sendok" class="peer sr-only">
+            <div class="w-9 h-9 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center mr-3 group-hover:scale-105 transition-transform">
+              <i data-lucide="utensils" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1">
+              <span class="block text-sm font-medium text-slate-200 group-hover:text-white">Kemas Sendok</span>
+              <span class="block text-[11px] text-slate-400">Pengepakan alat makan/aksesoris</span>
+            </div>
+            <div class="w-5 h-5 rounded-full border border-slate-600 peer-checked:border-indigo-500 peer-checked:bg-indigo-600 flex items-center justify-center transition-all">
+              <i data-lucide="check" class="w-3 h-3 text-white opacity-0 peer-checked:opacity-100"></i>
+            </div>
+          </label>
+
+        </div>
+      </div>
+
+      <!-- 3. BUKTI VISUAL FOTO UPLOAD & CAMERA PREVIEW -->
+      <div class="space-y-2">
+        <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+          4. Bukti Visual Foto <span class="text-rose-500">*</span>
+        </label>
+        
+        <!-- Upload Container -->
+        <div class="space-y-3">
+          
+          <!-- Hidden Native File Input (Support Camera Capture) -->
+          <input 
+            type="file" 
+            id="photoInput" 
+            accept="image/*" 
+            capture="environment" 
+            class="hidden"
+            onchange="handlePhotoSelect(event)"
+          >
+
+          <!-- Drag/Drop Dropzone Trigger -->
+          <div 
+            id="dropzone"
+            onclick="document.getElementById('photoInput').click()" 
+            class="border-2 border-dashed border-slate-700 hover:border-indigo-500 bg-slate-800/30 hover:bg-slate-800/60 rounded-xl p-6 text-center cursor-pointer transition-all group"
+          >
+            <div class="w-12 h-12 mx-auto rounded-full bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-indigo-400 group-hover:scale-110 transition-all">
+              <i data-lucide="camera" class="w-6 h-6"></i>
+            </div>
+            <p class="mt-3 text-sm font-medium text-slate-200">Ambil Foto Kendala / Hasil Kerja</p>
+            <p class="text-xs text-slate-400 mt-1">Klik untuk membuka kamera HP atau pilih dari Galeri (JPG, PNG)</p>
+          </div>
+
+          <!-- Image Preview Area -->
+          <div id="previewContainer" class="hidden relative rounded-xl overflow-hidden border border-slate-700 bg-slate-900">
+            <img id="imagePreview" src="" alt="Preview Bukti Foto" class="w-full h-64 object-cover">
+            
+            <div class="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent flex items-end justify-between p-4">
+              <div class="text-xs text-white">
+                <p id="fileName" class="font-medium truncate max-w-[200px]">photo.jpg</p>
+                <p id="fileSize" class="text-slate-400 text-[10px]">0 KB</p>
+              </div>
+              <button 
+                type="button" 
+                onclick="resetPhoto()" 
+                class="px-3 py-1.5 bg-rose-600/80 hover:bg-rose-600 text-white text-xs font-semibold rounded-lg shadow backdrop-blur transition-all flex items-center gap-1"
+              >
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Hapus Foto
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- OPTIONAL CATATAN TAMBAHAN -->
+      <div class="space-y-2">
+        <label for="notes" class="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+          Catatan Tambahan (Opsional)
+        </label>
+        <textarea 
+          id="notes" 
+          rows="2" 
+          placeholder="Tuliskan catatan khusus atau kendala jika ada..." 
+          class="w-full px-4 py-3 bg-slate-800/80 border border-slate-700/80 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all resize-none"
+        ></textarea>
+      </div>
+
+      <!-- SUBMIT BUTTON -->
+      <div class="pt-2">
+        <button 
+          type="submit" 
+          id="submitBtn"
+          class="w-full py-4 px-6 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-semibold text-sm rounded-xl shadow-lg shadow-indigo-600/25 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <i data-lucide="send" class="w-4 h-4"></i>
+          <span>Kirim Laporan Pengerjaan</span>
+        </button>
+      </div>
+
+    </form>
+
+  </main>
+
+  <!-- MOBILE BOTTOM BAR SUMMARY -->
+  <footer class="glass-card border-t border-slate-800 text-center py-3 text-xs text-slate-500">
+    <p>&copy; 2026 Production Reporting System • Offline Supported PWA</p>
+  </footer>
+
+  <!-- JAVASCRIPT LOGIC -->
+  <script>
+    // ==========================================
+    // 1. UTAMA: GANTI URL DI BAWAH SESUAI DEPLOYMENT GOOGLE APPS SCRIPT
+    // ==========================================
+    const GAS_ENDPOINT_URL = "https://script.google.com/macros/s/AKfycbw1R-WbDHMLiQCKJH-DHtqVtUM5f1nh0Rx9RjzVJD8O8L6BBtASS5lS-MbZkyhn2abe/exec";
+
+    // State Variables
+    let currentBase64Image = null;
+    let currentFileName = "";
+
+    // Initialize Lucide Icons
+    document.addEventListener("DOMContentLoaded", () => {
+      lucide.createIcons();
+      loadDraft();
+      setupFormListeners();
+      checkNetworkStatus();
+    });
+
+    // Check Network Connection Status
+    function checkNetworkStatus() {
+      const badge = document.getElementById("networkBadge");
+      function updateStatus() {
+        if (navigator.onLine) {
+          badge.className = "text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-full flex items-center gap-1.5";
+          badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Online`;
+        } else {
+          badge.className = "text-xs bg-rose-500/10 text-rose-400 border border-rose-500/20 px-2.5 py-1 rounded-full flex items-center gap-1.5";
+          badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span> Offline (Draft Mode)`;
+        }
+      }
+      window.addEventListener("online", updateStatus);
+      window.addEventListener("offline", updateStatus);
+    }
+
+    // Handle Photo Selection & Compression
+    function handlePhotoSelect(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      currentFileName = file.name;
+      const reader = new FileReader();
+
+      reader.onload = function (e) {
+        const img = new Image();
+        img.src = e.target.result;
+
+        img.onload = function () {
+          // Canvas Compression (Max width 1000px for optimal speed & Drive storage)
+          const canvas = document.createElement("canvas");
+          const MAX_WIDTH = 1000;
+          let scaleSize = 1;
+
+          if (img.width > MAX_WIDTH) {
+            scaleSize = MAX_WIDTH / img.width;
+          }
+
+          canvas.width = img.width * scaleSize;
+          canvas.height = img.height * scaleSize;
+
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+          // Get JPEG Base64
+          currentBase64Image = canvas.toDataURL("image/jpeg", 0.75);
+
+          // Update Preview UI
+          document.getElementById("imagePreview").src = currentBase64Image;
+          document.getElementById("fileName").innerText = file.name;
+          document.getElementById("fileSize").innerText = (Math.round(currentBase64Image.length * 0.75) / 1024).toFixed(1) + " KB (Compressed)";
+          
+          document.getElementById("dropzone").classList.add("hidden");
+          document.getElementById("previewContainer").classList.remove("hidden");
+
+          saveDraft();
+        };
+      };
+
+      reader.readAsDataURL(file);
+    }
+
+    // Reset Uploaded Photo
+    function resetPhoto() {
+      currentBase64Image = null;
+      currentFileName = "";
+      document.getElementById("photoInput").value = "";
+      document.getElementById("dropzone").classList.remove("hidden");
+      document.getElementById("previewContainer").classList.add("hidden");
+      saveDraft();
+    }
+
+    // Draft Auto Save (Local Storage)
+    function setupFormListeners() {
+      const inputs = document.querySelectorAll("#companyName, #officerName, input[name='taskItem'], #notes");
+      inputs.forEach(input => {
+        input.addEventListener("input", saveDraft);
+        input.addEventListener("change", saveDraft);
+      });
+    }
+
+    function saveDraft() {
+      const taskSelected = document.querySelector("input[name='taskItem']:checked");
+      const draftData = {
+        companyName: document.getElementById("companyName").value,
+        officerName: document.getElementById("officerName").value,
+        taskItem: taskSelected ? taskSelected.value : "",
+        notes: document.getElementById("notes").value
+      };
+      localStorage.setItem("work_report_draft", JSON.stringify(draftData));
+      
+      if (draftData.companyName || draftData.officerName || draftData.taskItem) {
+        document.getElementById("draftBadge").classList.remove("hidden");
+        document.getElementById("draftBadge").classList.add("flex");
+      }
+    }
+
+    function loadDraft() {
+      const savedObj = localStorage.getItem("work_report_draft");
+      if (!savedObj) return;
+
+      try {
+        const draft = JSON.parse(savedObj);
+        if (draft.companyName) document.getElementById("companyName").value = draft.companyName;
+        if (draft.officerName) document.getElementById("officerName").value = draft.officerName;
+        if (draft.notes) document.getElementById("notes").value = draft.notes;
+        if (draft.taskItem) {
+          const radio = document.querySelector(`input[name='taskItem'][value='${draft.taskItem}']`);
+          if (radio) radio.checked = true;
+        }
+        
+        if (draft.companyName || draft.officerName || draft.taskItem) {
+          document.getElementById("draftBadge").classList.remove("hidden");
+          document.getElementById("draftBadge").classList.add("flex");
+        }
+      } catch (e) {
+        console.error("Draft load error", e);
+      }
+    }
+
+    function clearDraft() {
+      localStorage.removeItem("work_report_draft");
+      document.getElementById("draftBadge").classList.add("hidden");
+      document.getElementById("draftBadge").classList.remove("flex");
+    }
+
+    // UI Alert Handler
+    function showAlert(type, title, message) {
+      const alertBox = document.getElementById("alertBox");
+      const alertIcon = document.getElementById("alertIcon");
+      const alertTitle = document.getElementById("alertTitle");
+      const alertMessage = document.getElementById("alertMessage");
+
+      alertBox.classList.remove("hidden", "bg-rose-950/40", "border-rose-500/30", "text-rose-200", "bg-emerald-950/40", "border-emerald-500/30", "text-emerald-200");
+
+      if (type === "error") {
+        alertBox.classList.add("bg-rose-950/40", "border-rose-500/30", "text-rose-200");
+        alertIcon.setAttribute("data-lucide", "alert-triangle");
+        alertIcon.className = "w-5 h-5 text-rose-400 shrink-0 mt-0.5";
+      } else {
+        alertBox.classList.add("bg-emerald-950/40", "border-emerald-500/30", "text-emerald-200");
+        alertIcon.setAttribute("data-lucide", "check-circle");
+        alertIcon.className = "w-5 h-5 text-emerald-400 shrink-0 mt-0.5";
+      }
+
+      alertTitle.innerText = title;
+      alertMessage.innerText = message;
+      lucide.createIcons();
+      alertBox.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function closeAlert() {
+      document.getElementById("alertBox").classList.add("hidden");
+    }
+
+    // Form Submission to Google Apps Script
+    document.getElementById("reportForm").addEventListener("submit", async function (e) {
+      e.preventDefault();
+
+      // Check URL Endpoint Configuration
+      if (GAS_ENDPOINT_URL === "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE" || !GAS_ENDPOINT_URL) {
+        showAlert("error", "URL GAS Belum Diatur", "Harap masukkan URL Web App Google Apps Script pada kode aplikasi JavaScript terlebih dahulu.");
+        return;
+      }
+
+      // Check Photo Attachment Validation
+      if (!currentBase64Image) {
+        showAlert("error", "Bukti Foto Diperlukan", "Silakan unggah atau ambil foto bukti pekerjaan sebelum mengirim laporan.");
+        return;
+      }
+
+      // Prepare UI Loading State
+      const submitBtn = document.getElementById("submitBtn");
+      const originalBtnHTML = submitBtn.innerHTML;
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `
+        <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        Mengirim Data & Mengunggah Foto...
+      `;
+
+      // Get Form Payload
+      const taskSelected = document.querySelector("input[name='taskItem']:checked");
+      const payload = {
+        companyName: document.getElementById("companyName").value.trim(),
+        officerName: document.getElementById("officerName").value.trim(),
+        taskItem: taskSelected ? taskSelected.value : "",
+        notes: document.getElementById("notes").value.trim(),
+        imageBuffer: currentBase64Image,
+        fileName: currentFileName || "laporan-foto.jpg"
+      };
+
+      try {
+        // Send POST Request to GAS (Use text mode or no-cors fallback safely)
+        const response = await fetch(GAS_ENDPOINT_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "text/plain;charset=utf-8"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (result.status === "success") {
+          showAlert("success", "Laporan Berhasil Terkirim!", `Data telah disimpan ke Google Sheet dan foto telah diunggah ke Google Drive.`);
+          
+          // Reset Form
+          document.getElementById("reportForm").reset();
+          resetPhoto();
+          clearDraft();
+        } else {
+          throw new Error(result.message || "Gagal menyimpan data ke server Google.");
+        }
+
+      } catch (err) {
+        console.error("Submission Error:", err);
+        showAlert("error", "Gagal Mengirim Laporan", "Terjadi kesalahan koneksi atau konfigurasi GAS: " + err.message);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalBtnHTML;
+        lucide.createIcons();
+      }
+    });
+  </script>
+
+</body>
+</html>
