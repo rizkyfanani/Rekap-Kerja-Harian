@@ -231,6 +231,36 @@
             </div>
           </label>
 
+          <!-- Option 5: Lainnya (Manual Input) -->
+          <label class="sm:col-span-2 relative flex items-center p-3.5 rounded-xl border border-slate-700/80 bg-slate-800/40 hover:bg-slate-800/80 cursor-pointer transition-all group has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-950/30 has-[:checked]:ring-1 has-[:checked]:ring-indigo-500">
+            <input type="radio" name="taskItem" value="Lainnya" class="peer sr-only">
+            <div class="w-9 h-9 rounded-lg bg-violet-500/10 text-violet-400 flex items-center justify-center mr-3 group-hover:scale-105 transition-transform">
+              <i data-lucide="edit-3" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1">
+              <span class="block text-sm font-medium text-slate-200 group-hover:text-white">Lainnya (Isi Manual)</span>
+              <span class="block text-[11px] text-slate-400">Ketik jenis pekerjaan lain di luar daftar di atas</span>
+            </div>
+            <div class="w-5 h-5 rounded-full border border-slate-600 peer-checked:border-indigo-500 peer-checked:bg-indigo-600 flex items-center justify-center transition-all">
+              <i data-lucide="check" class="w-3 h-3 text-white opacity-0 peer-checked:opacity-100"></i>
+            </div>
+          </label>
+
+        </div>
+
+        <!-- Input Manual Tambahan (Muncul saat "Lainnya" dipilih) -->
+        <div id="customTaskContainer" class="hidden pt-2 transition-all duration-200">
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-indigo-400">
+              <i data-lucide="file-text" class="w-4 h-4"></i>
+            </div>
+            <input 
+              type="text" 
+              id="customTaskInput" 
+              placeholder="Tuliskan nama pekerjaan yang dikerjakan..." 
+              class="w-full pl-10 pr-4 py-3 bg-slate-800/90 border border-indigo-500/60 rounded-xl text-sm text-white placeholder-slate-400 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+            >
+          </div>
         </div>
       </div>
 
@@ -341,6 +371,22 @@
       checkNetworkStatus();
     });
 
+    // Toggle Input Manual untuk opsi "Lainnya"
+    function toggleCustomTaskInput(shouldFocus = false) {
+      const taskSelected = document.querySelector("input[name='taskItem']:checked");
+      const customContainer = document.getElementById("customTaskContainer");
+      const customInput = document.getElementById("customTaskInput");
+
+      if (taskSelected && taskSelected.value === "Lainnya") {
+        customContainer.classList.remove("hidden");
+        customInput.required = true;
+        if (shouldFocus) customInput.focus();
+      } else {
+        customContainer.classList.add("hidden");
+        customInput.required = false;
+      }
+    }
+
     // Check Network Connection Status
     function checkNetworkStatus() {
       const badge = document.getElementById("networkBadge");
@@ -415,10 +461,15 @@
 
     // Draft Auto Save (Local Storage)
     function setupFormListeners() {
-      const inputs = document.querySelectorAll("#companyName, #officerName, input[name='taskItem'], #notes");
+      const inputs = document.querySelectorAll("#companyName, #officerName, input[name='taskItem'], #customTaskInput, #notes");
       inputs.forEach(input => {
         input.addEventListener("input", saveDraft);
-        input.addEventListener("change", saveDraft);
+        input.addEventListener("change", () => {
+          if (input.name === "taskItem") {
+            toggleCustomTaskInput(true);
+          }
+          saveDraft();
+        });
       });
     }
 
@@ -428,6 +479,7 @@
         companyName: document.getElementById("companyName").value,
         officerName: document.getElementById("officerName").value,
         taskItem: taskSelected ? taskSelected.value : "",
+        customTask: document.getElementById("customTaskInput").value,
         notes: document.getElementById("notes").value
       };
       localStorage.setItem("work_report_draft", JSON.stringify(draftData));
@@ -446,12 +498,15 @@
         const draft = JSON.parse(savedObj);
         if (draft.companyName) document.getElementById("companyName").value = draft.companyName;
         if (draft.officerName) document.getElementById("officerName").value = draft.officerName;
+        if (draft.customTask) document.getElementById("customTaskInput").value = draft.customTask;
         if (draft.notes) document.getElementById("notes").value = draft.notes;
         if (draft.taskItem) {
           const radio = document.querySelector(`input[name='taskItem'][value='${draft.taskItem}']`);
           if (radio) radio.checked = true;
         }
         
+        toggleCustomTaskInput(false);
+
         if (draft.companyName || draft.officerName || draft.taskItem) {
           document.getElementById("draftBadge").classList.remove("hidden");
           document.getElementById("draftBadge").classList.add("flex");
@@ -512,6 +567,20 @@
         return;
       }
 
+      // Validasi & Ambil Nilai Pekerjaan (Termasuk Opsi Manual "Lainnya")
+      const taskSelected = document.querySelector("input[name='taskItem']:checked");
+      let finalTaskItem = taskSelected ? taskSelected.value : "";
+
+      if (finalTaskItem === "Lainnya") {
+        const customValue = document.getElementById("customTaskInput").value.trim();
+        if (!customValue) {
+          showAlert("error", "Detail Pekerjaan Kosong", "Silakan ketikkan jenis pekerjaan manual pada kolom yang tersedia.");
+          document.getElementById("customTaskInput").focus();
+          return;
+        }
+        finalTaskItem = customValue;
+      }
+
       // Prepare UI Loading State
       const submitBtn = document.getElementById("submitBtn");
       const originalBtnHTML = submitBtn.innerHTML;
@@ -525,18 +594,17 @@
       `;
 
       // Get Form Payload
-      const taskSelected = document.querySelector("input[name='taskItem']:checked");
       const payload = {
         companyName: document.getElementById("companyName").value.trim(),
         officerName: document.getElementById("officerName").value.trim(),
-        taskItem: taskSelected ? taskSelected.value : "",
+        taskItem: finalTaskItem,
         notes: document.getElementById("notes").value.trim(),
         imageBuffer: currentBase64Image,
         fileName: currentFileName || "laporan-foto.jpg"
       };
 
       try {
-        // Send POST Request to GAS (Use text mode or no-cors fallback safely)
+        // Send POST Request to GAS
         const response = await fetch(GAS_ENDPOINT_URL, {
           method: "POST",
           headers: {
@@ -550,8 +618,9 @@
         if (result.status === "success") {
           showAlert("success", "Laporan Berhasil Terkirim!", `Data telah disimpan ke Google Sheet dan foto telah diunggah ke Google Drive.`);
           
-          // Reset Form
+          // Reset Form & Sembunyikan Input Manual
           document.getElementById("reportForm").reset();
+          toggleCustomTaskInput(false);
           resetPhoto();
           clearDraft();
         } else {
